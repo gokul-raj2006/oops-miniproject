@@ -296,11 +296,10 @@
         let isRecording = false;
         let transcripts = [];
 
-        // Check if browser supports Speech Recognition
+        // Check browser support
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = languageSelect.value;
@@ -316,24 +315,31 @@
             return;
         }
 
-        // Update language when changed
         languageSelect.addEventListener('change', () => {
             recognition.lang = languageSelect.value;
         });
 
-        // Start recording
-        startBtn.addEventListener('click', () => {
+        // ✅ Fixed: Request mic permission on user click
+        startBtn.addEventListener('click', async () => {
             if (!isRecording) {
-                recognition.start();
-                isRecording = true;
-                startBtn.textContent = '🎤 Listening...';
-                startBtn.classList.add('recording');
-                stopBtn.disabled = false;
-                updateStatus('listening', 'Listening... Speak now!');
+                try {
+                    await navigator.mediaDevices.getUserMedia({ audio: true });
+                    console.log('Microphone access granted');
+
+                    recognition.start();
+                    isRecording = true;
+                    startBtn.textContent = '🎤 Listening...';
+                    startBtn.classList.add('recording');
+                    stopBtn.disabled = false;
+                    updateStatus('listening', 'Listening... Speak now!');
+                } catch (err) {
+                    console.error('Microphone access denied:', err);
+                    updateStatus('error', 'Please allow microphone access.');
+                    return;
+                }
             }
         });
 
-        // Stop recording
         stopBtn.addEventListener('click', () => {
             if (isRecording) {
                 recognition.stop();
@@ -345,14 +351,12 @@
             }
         });
 
-        // Clear transcripts
         clearBtn.addEventListener('click', () => {
             transcripts = [];
             outputArea.innerHTML = 'Your recognized speech will appear here...';
             outputArea.classList.add('empty');
         });
 
-        // Handle recognition results
         recognition.onresult = (event) => {
             let interimTranscript = '';
             let finalTranscript = '';
@@ -366,50 +370,26 @@
                 }
             }
 
-            if (finalTranscript) {
-                addTranscript(finalTranscript.trim());
-            }
-
-            // Show interim results in status
-            if (interimTranscript) {
-                updateStatus('listening', `Hearing: "${interimTranscript}"`);
-            }
+            if (finalTranscript) addTranscript(finalTranscript.trim());
+            if (interimTranscript) updateStatus('listening', `Hearing: "${interimTranscript}"`);
         };
 
-        // Handle recognition end
         recognition.onend = () => {
-            if (isRecording) {
-                // Restart if still recording (for continuous mode)
-                recognition.start();
-            } else {
-                updateStatus('idle', 'Ready to record');
-            }
+            if (isRecording) recognition.start();
+            else updateStatus('idle', 'Ready to record');
         };
 
-        // Handle errors
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
-            let errorMessage = 'Error occurred';
-            
+            let errorMessage;
             switch(event.error) {
-                case 'no-speech':
-                    errorMessage = 'No speech detected. Please try again.';
-                    break;
-                case 'audio-capture':
-                    errorMessage = 'Microphone not found or not accessible.';
-                    break;
-                case 'not-allowed':
-                    errorMessage = 'Microphone access denied. Please allow access.';
-                    break;
-                case 'network':
-                    errorMessage = 'Network error. Check your connection.';
-                    break;
-                default:
-                    errorMessage = `Error: ${event.error}`;
+                case 'no-speech': errorMessage = 'No speech detected. Please try again.'; break;
+                case 'audio-capture': errorMessage = 'Microphone not found or not accessible.'; break;
+                case 'not-allowed': errorMessage = 'Microphone access denied. Please allow access.'; break;
+                case 'network': errorMessage = 'Network error. Check your connection.'; break;
+                default: errorMessage = `Error: ${event.error}`;
             }
-            
             updateStatus('error', errorMessage);
-            
             if (isRecording) {
                 isRecording = false;
                 startBtn.textContent = 'Start Recording';
@@ -418,10 +398,8 @@
             }
         };
 
-        // Update status indicator
         function updateStatus(type, message) {
             statusIndicator.className = 'status-indicator';
-            
             if (type === 'listening') {
                 statusIndicator.classList.add('status-listening');
                 statusIndicator.innerHTML = `<span class="pulse-dot"></span> ${message}`;
@@ -434,28 +412,19 @@
             }
         }
 
-        // Add transcript to output
         function addTranscript(text) {
             const now = new Date();
             const timeString = now.toLocaleTimeString();
-            
-            const transcriptItem = {
-                text: text,
-                time: timeString
-            };
-            
-            transcripts.push(transcriptItem);
+            transcripts.push({ text, time: timeString });
             displayTranscripts();
         }
 
-        // Display all transcripts
         function displayTranscripts() {
             if (transcripts.length === 0) {
                 outputArea.innerHTML = 'Your recognized speech will appear here...';
                 outputArea.classList.add('empty');
                 return;
             }
-
             outputArea.classList.remove('empty');
             outputArea.innerHTML = transcripts.map(item => `
                 <div class="transcript-item">
@@ -463,20 +432,8 @@
                     <div>${item.text}</div>
                 </div>
             `).join('');
-
-            // Auto-scroll to bottom
             outputArea.scrollTop = outputArea.scrollHeight;
         }
-
-        // Request microphone permission on page load
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(() => {
-                console.log('Microphone access granted');
-            })
-            .catch((err) => {
-                console.error('Microphone access denied:', err);
-                updateStatus('error', 'Please allow microphone access');
-            });
     </script>
 </body>
 </html>
